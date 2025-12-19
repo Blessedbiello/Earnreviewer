@@ -3,15 +3,65 @@
 
 ---
 
+## 📝 Executive Summary
+
+This proposal outlines a **3-week implementation plan** for an AI-powered GitHub auto-review system that integrates seamlessly with Superteam Earn's existing infrastructure. The system will automatically analyze GitHub pull requests and repositories submitted to bounties, providing intelligent scoring and quality labels to help sponsors make faster, data-driven decisions.
+
+**The Approach**: Build an event-driven worker service using your existing BullMQ queue system, GitHub's GraphQL API, and OpenRouter AI to evaluate submissions across 8 quality dimensions. The system handles 40+ edge cases (private repos, rate limits, large PRs, etc.) and delivers actionable insights through your sponsor dashboard.
+
+**The Outcome**: Reduce sponsor review time by 5-10 minutes per submission while maintaining high-quality standards. At 1,000 submissions/month, this enables sponsors to focus on final decisions rather than initial screening, dramatically improving workflow efficiency.
+
+---
+
 ## 📋 Table of Contents
 
-1. [Project Overview](#project-overview)
-2. [Solution Architecture](#solution-architecture)
-3. [Technical Architecture](#technical-architecture)
-4. [Implementation Plan](#implementation-plan)
-5. [Edge Case Handling](#edge-case-handling)
-6. [Scoring Methodology](#scoring-methodology)
-7. [Deliverables](#deliverables)
+1. [Executive Summary](#executive-summary)
+2. [Project Plan at a Glance](#project-plan-at-a-glance)
+3. [Project Overview](#project-overview)
+4. [Solution Architecture](#solution-architecture)
+5. [Technical Architecture](#technical-architecture)
+6. [Implementation Plan](#implementation-plan)
+7. [Edge Case Handling](#edge-case-handling)
+8. [Scoring Methodology](#scoring-methodology)
+9. [Risks & Mitigation](#risks--mitigation)
+10. [Deliverables](#deliverables)
+
+---
+
+## 🗓️ Project Plan at a Glance
+
+### Timeline: 3 Weeks
+
+**Week 1: Foundation & Infrastructure**
+- GitHub API integration with GraphQL queries
+- URL parser and validation system
+- Agent queue extension for GitHub submissions
+- Data fetchers with error handling and rate limit management
+
+**Week 2: Intelligence Layer**
+- 8-component scoring algorithm implementation
+- OpenRouter AI integration for code quality analysis
+- Edge case handling for 40+ scenarios
+- Comprehensive test suite and accuracy validation
+
+**Week 3: Integration & Production**
+- Sponsor dashboard components (AiReviewGitHub modal)
+- API endpoints for GitHub stats and review workflow
+- Monitoring, logging, and deployment setup
+- End-to-end testing and documentation
+
+### Key Deliverables
+✅ Production-ready auto-review system
+✅ 40+ edge cases handled comprehensively
+✅ AI-powered scoring across 8 quality dimensions
+✅ Seamless dashboard integration
+✅ Complete documentation and 30-day support
+
+### Success Metrics
+- **Performance**: <25s for typical PRs, <40s for repos
+- **Accuracy**: >80% AI-human agreement, >75% label accuracy
+- **Reliability**: <2% error rate, 99%+ uptime
+- **Efficiency**: 5-10 min saved per submission review
 
 ---
 
@@ -20,7 +70,7 @@
 Building an AI-powered auto-review system for GitHub PRs and repositories, integrated with Superteam Earn's existing agent infrastructure.
 
 **Scope**:
-- **Timeline**: 2-3 weeks (140-160 hours)
+- **Timeline**: 2-3 weeks
 - **Deliverables**: Production-ready system with 40+ edge cases handled
 - **Integration**: Seamless fit with existing BullMQ, OpenRouter, and dashboard workflows
 - **Technologies**: Node.js, TypeScript, Next.js, Prisma, Octokit.js, OpenRouter
@@ -341,6 +391,45 @@ if (isTooLarge)          return 'Needs_Review';
 | Label accuracy | >75% exact | >65% | Compare vs sponsor final decision |
 | False positives (Shortlisted → Low) | <5% | <10% | Track sponsor overrides |
 | False negatives (Low → Shortlisted) | <10% | <15% | Track sponsor overrides |
+
+---
+
+## ⚠️ Risks & Mitigation
+
+### High-Priority Risks
+
+| Risk | Impact | Probability | Mitigation Strategy |
+|------|--------|-------------|---------------------|
+| **GitHub API Rate Limits** | System blocked, submissions stuck | Medium | • 5-token rotation strategy (25k req/hour)<br>• Monitor `X-RateLimit-Remaining` headers<br>• Auto-switch tokens at <100 remaining<br>• Queue retry with exponential backoff |
+| **earn-agent Access Delay** | Cannot start Week 1 work | Medium | • Begin with earn service integration (Week 1 Days 1-4)<br>• Parallel work on GraphQL queries (mockable)<br>• 1-week buffer in timeline |
+| **AI Analysis Inaccuracy** | Poor label quality, sponsor distrust | Medium | • Conservative labeling (use `Needs_Review` when uncertain)<br>• Track sponsor overrides for prompt tuning<br>• Combine quantitative metrics + AI qualitative analysis<br>• 80%+ accuracy target with continuous improvement |
+| **Large PR Performance** | Timeouts, poor UX | Low-Medium | • Sample strategy: 50 files + all test files for PRs >1000 files<br>• 5-min timeout with graceful degradation<br>• Flag as `Needs_Review` with partial data<br>• Cache GitHub data for re-analysis |
+| **Private/Deleted Repos** | Analysis fails, error noise | High | • Graceful handling with `Inaccessible` label<br>• Store error metadata for sponsor context<br>• No retry loops (404/403 are terminal)<br>• Clear error messages in dashboard |
+
+### Medium-Priority Risks
+
+| Risk | Impact | Mitigation |
+|------|--------|-----------|
+| **OpenRouter Service Outage** | No AI analysis | • Retry 3x with exponential backoff<br>• Fall back to quantitative-only scoring<br>• Label as `Needs_Review` with note<br>• Monitor service health |
+| **Scope Creep** | Timeline extends beyond 3 weeks | • Fixed 40 edge cases (documented)<br>• Clear MVP scope: PR + Repo only (no commits, issues)<br>• Additional features deferred to post-launch |
+| **Token Exhaustion** | All 5 tokens rate-limited simultaneously | • Queue retry in 1 hour (stagger resets)<br>• Alert monitoring for this scenario<br>• Emergency: temporary `Needs_Review` labels |
+| **Database Migration Issues** | `submission.ai` schema problems | • No migration needed (JSON field is flexible)<br>• Backward compatible: check for `ai.githubMeta` presence<br>• Validation before storage |
+
+### Low-Priority Risks
+
+| Risk | Impact | Mitigation |
+|------|--------|-----------|
+| **Generated Code Detection** | Inflated quality scores | • File pattern analysis (lock files, dist/)<br>• Reduce score if >80% generated<br>• Document common patterns |
+| **Time Zone Issues** | "Recent activity" calculation errors | • Use UTC timestamps consistently<br>• GitHub API returns ISO 8601 |
+| **Dependency-Only PRs** | Misleading scores | • Detect package.json-only changes<br>• Context-aware scoring<br>• Flag as `Needs_Review` if no code changes |
+
+### Continuous Monitoring
+
+Post-launch tracking to catch emerging risks:
+- **Error Rate Dashboard**: Alert if >5% jobs fail
+- **Performance Dashboard**: Alert if >30s avg processing time
+- **Accuracy Tracking**: Weekly sponsor override analysis
+- **Rate Limit Usage**: Alert if >70% capacity on any token
 
 ---
 
